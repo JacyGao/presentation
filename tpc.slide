@@ -1,0 +1,104 @@
+Perform Multi-Document Transaction with Two Phase Commits and DynamoDB
+
+Jacy Gao
+Software Engineer, EA Firemonkeys
+jgao@example.com
+http://url/
+
+* The challenge
+
+Similar to other NoSQL Databases, in DynamDB, operations that involve multiple documents, which are often referred to as “multi-document transactions”, are not atomic.
+
+When executing a transaction composed of sequential operations, certain issues arise, such as:
+
+- Atomicity: if one operation fails, the previous operation within the transaction must “rollback” to the previous state (i.e. the “nothing,” in “all or nothing”).
+
+- Consistency: if a major failure (i.e. network, hardware) interrupts the transaction, the database must be able to recover a consistent state.
+
+* Solutions
+
+- Choose a database with native transaction support (PostgresSQL, CockroachDB...)
+
+- Implement two-phase commit in your application to provide support for multi-document updates.
+
+* Agenda
+
+SQL Transaction
+Two Phase Commit
+Transaction Manager
+Example: Alliance Donation
+
+* SQL Transaction
+
+- Original data is stored in the Rollback Segement
+
+- During transaction, reads get the original data out of the Rollback Segment
+
+- Rolback re-copies data from Rollback Segement to replace the changes data
+
+- Changed data is marked as Committed only after transaction is commited
+
+* Two Phase Commits
+- 20+ years old algorithm
+
+- Used for multi-database transcations
+
+- Two Phase: Commit Reuqest Phase and Commit Phase
+
+- Reversible
+
+* Transaction Manager
+
+Transaction Interface
+Transaction Store
+Transaction Behaviours
+
+* Transaction Interface
+
+.code iface.go /TransactionManager contains public methods of package dtpc/,/Ends/
+
+* Transaction Store
+
+.code iface.go /TransactionHandler defines necessary methods of handling transaction data/,/Ends/
+
+* Transaction Behaviours
+
+.code iface.go /AccountHandler defines necessary methods of handling account data/,/Ends/
+
+* Start Transaction
+
+some text
+
+* Rollback Transaction
+
+some text
+
+* Example: Donation
+
+1. Player A makes a donation request
+
+2. Solicitation for Player A is created
+
+3. Player B donates to Player A
+
+4. Player A receives donation
+
+* Player A makes a donation request
+
+some text
+
+* Solicitation for Player A is created
+
+some text
+
+* Player B donates to Player A
+
+some text
+
+* Player A receives donation
+
+some text
+
+* Considerations
+
+some text
