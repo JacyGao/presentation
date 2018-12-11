@@ -1,0 +1,115 @@
+func exampleSolicitCrew() {
+	// SolicitCrewSQL OMIT
+	newSolicitation := &model.AllianceDocument{
+		ID:                  "example_solicitation_id", // uuid
+		AllianceID:          "example_alliance_id", // alliance id retrieved from EADP
+		DocumentType:        model.AllianceSolicitation,
+		Version:             0, // CAS Value
+		Data:                5, // quantity of donation
+		PendingTransactions: []string{},
+		Created:             time.Now().Unix(),
+		RemainingCount:      5,
+		AcceptedCount:       0,
+		Expiry:              1544411315,
+	}
+
+	err := model.Upsert(ctx, newSolicitation)
+	// Ends OMIT
+}
+
+func exampleDonateCrew() {
+	// DonateCrewSQL OMIT
+	t := Transaction{
+		ID:                   "example_transaction_id", // uuid
+		TransactionReference: "example_alliance_id:example_solicitation_id",
+		Source:               "player_b_persona_id",
+		Destination:          "example_solicitation_id",
+		Value:                5,
+		TransactionState:     Pending,
+		LastModified:         time.Now(),
+	}
+
+	err := db.putItem(t)
+	// Ends OMIT
+
+	// DonateCrewSQL2 OMIT
+	--key player_b_persona_id
+	--update-expression SET
+		version = version+1,
+		pending_transcations = list_append (t.ID, pending_transcations),
+		donation_count = donation_count + t.Value
+	// Ends OMIT
+
+	// DonateCrewSQL3 OMIT
+	--key example_solicitation_id
+	--update-expression SET
+		version = version+1,
+		pending_transcations = list_append (t.ID, pending_transcations),
+		remaining_count = remaining_count - t.Value
+	// Ends OMIT
+
+	// DonateCrewSQL4 OMIT
+	--key example_transaction_id
+	--update-expression SET transaction_state = Applied, last_modified = time.Now()
+	// Ends OMIT
+
+	// DonateCrewSQL5 OMIT
+	--key player_b_persona_id
+	--update-expression SET
+		version = version+1,
+		pending_transcations = REMOVE pending_transcations[IndexOf(example_transaction_id)]
+	// Ends OMIT
+
+	// DonateCrewSQL6 OMIT
+	--key example_solicitation_id
+	--update-expression SET
+		version = version+1,
+		pending_transcations = REMOVE pending_transcations[IndexOf(example_transaction_id)]
+	// Ends OMIT
+
+	// DonateCrewSQL7 OMIT
+	--key example_transaction_id
+	--update-expression SET transaction_state = Done, last_modified = time.Now()
+	// Ends OMIT
+}
+
+func exampleAcknowledgeCrew() {
+	// AcknowledgeCrew OMIT
+	t := Transaction{
+		ID:                   "example_transaction_id_2", // uuid
+		TransactionReference: "example_alliance_id:example_solicitation_id",
+		Source:               "example_solicitation_id",
+		Destination:          "player_a_persona_id",
+		Value:                5,
+		TransactionState:     Pending,
+		LastModified:         time.Now(),
+	}
+
+	err := db.putItem(t)
+	// Ends OMIT
+
+	// AcknowledgeCrew2 OMIT
+	--key example_solicitation_id
+	--update-expression SET
+	version = version+1,
+		pending_transcations = list_append (t.ID, pending_transcations),
+		accepted_count = accepted_count + t.Value
+	// Ends OMIT
+
+	// AcknowledgeCrew3 OMIT
+	--key example_transaction_id_2
+	--update-expression SET transaction_state = Applied, last_modified = time.Now()
+	// Ends OMIT
+
+	// AcknowledgeCrew4 OMIT
+	--key example_solicitation_id
+	--update-expression SET
+		version = version+1,
+		pending_transcations = REMOVE pending_transcations[IndexOf(example_transaction_id_2)]
+	// Ends OMIT
+
+	// AcknowledgeCrew5 OMIT
+	--key example_transaction_id_2
+	--update-expression SET transaction_state = Done, last_modified = time.Now()
+	// Ends OMIT
+}

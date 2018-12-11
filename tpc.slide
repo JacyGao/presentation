@@ -2,12 +2,11 @@ Perform Multi-Document Transaction with Two Phase Commits and DynamoDB
 
 Jacy Gao
 Software Engineer, EA Firemonkeys
-jgao@example.com
-http://url/
+jgao@ea.coms
 
 * The challenge
 
-Similar to other NoSQL Databases, in DynamDB, operations that involve multiple documents, which are often referred to as “multi-document transactions”, are not atomic.
+Similar to other NoSQL Databases, in DynamoDB, operations that involve multiple documents, which are often referred to as “multi-document transactions”, are not atomic.
 
 When executing a transaction composed of sequential operations, certain issues arise, such as:
 
@@ -30,75 +29,159 @@ Example: Alliance Donation
 
 * SQL Transaction
 
-- Original data is stored in the Rollback Segement
+- Original data is stored in the Rollback Segment
 
 - During transaction, reads get the original data out of the Rollback Segment
 
-- Rolback re-copies data from Rollback Segement to replace the changes data
+- Rollback re-copies data from Rollback Segement to replace the changed data
 
 - Changed data is marked as Committed only after transaction is commited
 
 * Two Phase Commits
 - 20+ years old algorithm
 
-- Used for multi-database transcations
+- Atomic Commitment protocol
 
-- Two Phase: Commit Reuqest Phase and Commit Phase
+- Commonly Used to make sure the transactions are in sync in multiple databases
 
-- Reversible
+- Two Phase: Commit Request Phase and Commit / Abort Phase
 
-* Transaction Manager
+- Transactions are reversible
 
-Transaction Interface
-Transaction Store
-Transaction Behaviours
-
-* Transaction Interface
-
-.code iface.go /TransactionManager contains public methods of package dtpc/,/Ends/
-
-* Transaction Store
-
-.code iface.go /TransactionHandler defines necessary methods of handling transaction data/,/Ends/
-
-* Transaction Behaviours
-
-.code iface.go /AccountHandler defines necessary methods of handling account data/,/Ends/
+- Database can be recovered in case of major failures
 
 * Start Transaction
+Transfer 100 points from Player A to Player B
+.image img/2pc_1.png
 
-some text
+* Start Transaction
+.image img/2pc_2.png
 
 * Rollback Transaction
 
-some text
+If process crashes in Init State, retry and complete the transaction.
+
+* Rollback Transaction
+
+If process crashes in Pending State, Perform a Rollback by reverting modified documents.
+The following diagram shows the rollback process when a crash occurred between two document updates.
+.image img/2pc_3.png
+
+* Rollback Transaction
+
+If process crashes in Commit State, retrieve the transaction document and resume from the "Commit Transaction" step.
+
+* Transaction Manager
+
+- Transaction Interface - High level interface with public methods
+
+- Transaction Store - Transaction coordinator that stores and observes transaction processes
+
+- Transaction Behaviours - Queries of individual document when a transaction is applied.
+
+* Transaction Interface
+
+.code examples/iface.go /TransactionManager contains public methods of package dtpc/,/Ends/
+
+* Transaction Store
+
+.code examples/iface.go /TransactionHandler defines necessary methods of handling transaction data/,/Ends/
+
+* Transaction Behaviours
+
+.code examples/iface.go /AccountHandler defines necessary methods of handling account data/,/Ends/
 
 * Example: Donation
 
 1. Player A makes a donation request
 
-2. Solicitation for Player A is created
+2. Player B donates to Player A
 
-3. Player B donates to Player A
+3. Player A receives donation from Player B
 
-4. Player A receives donation
+* 1. Player A makes a donation request
+Insert solicitation document
+.code examples/sql.txt /SolicitCrewSQL/,/Ends/
 
-* Player A makes a donation request
+* 2. Player B donates to Player A
+Insert transaction document
+.code examples/sql.txt /DonateCrewSQL/,/Ends/
 
-some text
+* 2. Player B donates to Player A (Commit-Request Phase)
+Update Player B document by increasing donation count
+.code examples/sql.txt /DonateCrewSQL2/,/Ends/
+Update Solicitation document decreasing remaining count
+.code examples/sql.txt /DonateCrewSQL3/,/Ends/
+Update Transaction Status to Applied
+.code examples/sql.txt /DonateCrewSQL4/,/Ends/
 
-* Solicitation for Player A is created
+* 2. Player B donates to Player A (Commit Phase)
+Commit Player B document by removing transaction id from pending list
+.code examples/sql.txt /DonateCrewSQL5/,/Ends/
+Commit Solicitation document by removing transaction id from pending list
+.code examples/sql.txt /DonateCrewSQL6/,/Ends/
+Update Transaction Status to Done
+.code examples/sql.txt /DonateCrewSQL7/,/Ends/
 
-some text
+* 3. Player A receives donation
+Insert transaction document
+.code examples/sql.txt /AcknowledgeCrew/,/Ends/
 
-* Player B donates to Player A
+* 3. Player A receives donation (Commit-Request Phase)
+Update Solicitation by increasing accepted count
+.code examples/sql.txt /AcknowledgeCrew2/,/Ends/
+Update Transaction Status to Applied
+.code examples/sql.txt /AcknowledgeCrew3/,/Ends/
 
-some text
+* 3. Player A receives donation (Commit Phase)
+Commit Player A document by removing transaction id from pending list
+.code examples/sql.txt /AcknowledgeCrew4/,/Ends/
+Update Transaction Status to Done
+.code examples/sql.txt /AcknowledgeCrew5/,/Ends/
 
-* Player A receives donation
+* Considerations
+Cost
+- Each successful donation (donate + acknowledge) requires 12 writes to the database using the two-phase-commits pattern.
+- The size of documents are small which minimizes the required database throughput.
 
-some text
+Eventual Consistency
+- Solicitation and player documents are eventually consistent. If the record is fetched while a transaction is being processed, the result is not guaranteed to be the latest.
+- Optionally a pessimistic lock can be added to enable strong consistency with sacrificing significant performance.
+
+Concurrency
+- Currently concurrent donations are allowed and they are handled using Compare and Swap (Optimistic Locking).
 
 * Considerations
 
-some text
+Recovery
+The Two-Phase-Commits Pattern allows applications running the sequence to resume the transaction and arrive at a consistent state. It needs to be handled properly in the application.
+
+Currently the Rollback process is automatically triggered when a failure occurs during a transaction workflow.
+
+More consideration should be put into the Rollback implementations such as:
+
+- Alliances always check incomplete transactions and perform rollback immediately
+- Run Recovery at regular intervals with a background worker
+- Run Recovery at application startup if server crashes for any reason
+
+* Documentations
+
+Perform Two Phase Commit
+.link https://confluence.ea.com/display/Firemonkeys/Exos+RFC%3A+Perform+Two+Phase+Commits
+
+Alliance Donation
+.link https://confluence.ea.com/display/Firemonkeys/Alliance+Donation
+
+Package dtpc
+.link https://stash.ea.com/projects/EXOS/repos/server/browse/lib/data/dynamodb/dtpc/README.md
+
+* References
+
+Mike Duckett "The Two-Phase Commit Protocol"
+.link http://courses.cs.vt.edu/~cs5204/fall00/distributedDBMS/duckett/tpcp.html
+
+MongoDB "Perform Two Phase Commits"
+.link https://docs.mongodb.com/v3.4/tutorial/perform-two-phase-commits/
+
+Couchbase "Providing transactional logic"
+.link https://developer.couchbase.com/documentation/server/3.x/developer/dev-guide-3.0/transactional-logic.html
